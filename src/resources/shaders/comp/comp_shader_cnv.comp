@@ -1,0 +1,51 @@
+#version 450 core
+
+
+layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+uniform float time;
+uniform uint width;
+uniform uint height;
+uniform layout(binding=3, rgba8) image2D src;
+uniform layout(binding=4, rgba8) image2D dst;
+
+layout(std430, binding=5) buffer Data {
+    //int size;
+    float data[];
+};
+
+
+void main() {
+    ivec2 pos = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
+
+
+
+    float dbgdata1[] = { -1,-1,-1,
+                        -1, 9,-1,
+                        -1,-1,-1};
+
+    float dbgdata2[] = {  1.0,  4.0,  6.0,  4.0, 1.0,
+                         4.0, 16.0, 24.0, 16.0, 4.0,
+                         6.0, 24.0, 36.0, 24.0, 6.0,
+                         4.0, 16.0, 24.0, 16.0, 4.0,
+                         1.0,  4.0,  6.0,  4.0, 1.0};
+
+    int size = 3;
+
+    ivec2 offset = ivec2(floor(size/2));
+    vec4 sum = vec4(0.0,0.0,0.0,0.0);
+
+
+    for(int x = 0; x < size; x++ ) {
+    for(int y = 0; y < size; y++ ) {
+        sum += dbgdata1[x + y*size] * (1/1) * imageLoad(src, pos + ivec2(x, y) - offset);
+        //if(all(equal(mod(gl_GlobalInvocationID.xy,vec2(2)),vec2(0)))) {
+        //if (mod(time,3)<1.5) {sum -= vec4(vec3(abs(data[x + y*size])*36),1); }
+        //else       { sum -= vec4(vec3(abs(dbgdata2[x + y*size])/36),1); }}
+    }}
+
+    imageStore(dst, pos, vec4(sum));
+
+    //imageStore(dst, pos, vec4(vec3(data[4]),1));
+    //imageStore(dst, pos, vec4(pos.x/float(width),pos.y/float(height),0,1));*/
+}
