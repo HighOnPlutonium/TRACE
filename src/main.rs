@@ -40,7 +40,6 @@ mod util;
 
 
 
-
 struct RenderStorage {
     vertex_buffer: VertexBufferAny,
     index_buffers: Vec<IndexBufferAny>,
