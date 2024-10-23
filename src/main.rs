@@ -10,7 +10,7 @@ use std::ops::AddAssign;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use glium::{Blend, DepthTest, draw_parameters, DrawParameters, LinearBlendingFactor, Program, Surface, Texture2d, uniform};
+use glium::{Blend, DepthTest, draw_parameters, DrawParameters, LinearBlendingFactor, Program, Surface, Texture2d, uniform, PolygonMode};
 use glium::backend::{glutin::Display, glutin::glutin::context::ContextAttributesBuilder};
 use glium::buffer::Mapping;
 use glium::glutin::config::ConfigTemplateBuilder;
@@ -19,9 +19,12 @@ use glium::glutin::display::GetGlDisplay;
 use glium::glutin::prelude::{GlDisplay, NotCurrentGlContext};
 use glium::glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
 use glium::index::{IndexBufferAny, PrimitiveType};
+use glium::index::IndicesSource::NoIndices;
 use glium::program::ComputeShader;
-use glium::texture::{MipmapsOption, RawImage2d, UncompressedFloatFormat};
+use glium::texture::{MipmapsOption, RawImage2d, Texture2dDataSink, UncompressedFloatFormat};
 use glium::uniforms::{ImageUnitAccess, ImageUnitFormat, MagnifySamplerFilter, MinifySamplerFilter, SamplerWrapFunction, UniformBuffer};
+use glium::uniforms::UniformType::Image2d;
+use glium::vertex::VertexBuffer;
 use glium::vertex::VertexBufferAny;
 use glutin_winit::DisplayBuilder;
 use image::{ColorType, ImageFormat};
@@ -36,6 +39,16 @@ use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 
 mod util;
+
+
+
+
+#[derive(Copy, Clone, Debug)]
+struct Vertex {
+    position: [f32;4],
+}
+implement_vertex!(Vertex,position);
+
 
 
 
@@ -102,7 +115,7 @@ impl ApplicationHandler for App {
             WindowEvent::DroppedFile(path) => {
                 if let Some(display) = self.display.as_ref() {
 
-                    let (vertex_buffer, index_buffer) = util::wavefront(display, PrimitiveType::TriangleStrip, path.clone());
+                    let (mut vertex_buffer, index_buffer) = util::wavefront(display, PrimitiveType::TriangleStrip, path.clone());
                     let (_, wireframe_buffer) = util::wavefront(display, PrimitiveType::LineStrip, path.clone());
                     let mut programs: Vec<Program> = Vec::with_capacity(3);
                     let mut computes: Vec<ComputeShader> = Vec::with_capacity(1);
@@ -136,7 +149,29 @@ impl ApplicationHandler for App {
                     computes.push(ComputeShader::from_source(display,
                                                              &*util::load_shader(util::COMP_SHADER_CNV)
                                                              ).unwrap());
-
+                    let step = 0.05;
+                    let x = 1.0f32;
+                    let y = 1.0f32;
+                    let z = 1.0f32;
+                    let w = 1.0f32;
+                    let size = x*y*z*w/step;
+                    let mut data: Vec<Vertex> = Vec::with_capacity(size as usize);
+                    let mut vertpos = [0.0,0.0,0.0,0.0f32];
+                    for a in 0..(x/step) as usize {
+                        vertpos[0] = (a as f32)*step-x/2.0;
+                        for b in 0..(y/step) as usize {
+                            vertpos[1] = (b as f32)*step-y/2.0;
+                            for c in 0..(z/step) as usize {
+                                vertpos[2] = (c as f32)*step-z/2.0;
+                                for d in 0..(w/step) as usize {
+                                    vertpos[3] = (d as f32)*step-w/2.0;
+                                    data.push(Vertex{position:vertpos});
+                                }
+                            }
+                        }
+                    }
+                    let grid_vbuf = VertexBuffer::new(display, &data).unwrap();
+                    vertex_buffer = grid_vbuf.into();
                     self.storage = Some(RenderStorage {
                         vertex_buffer,
                         index_buffers,
@@ -240,7 +275,26 @@ impl ApplicationHandler for App {
                             { source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::SourceAlpha };
 
 
+
+
                         let params = DrawParameters {
+                            depth: glium::Depth {
+                                test: DepthTest::Overwrite,
+                                write: false,
+                                ..Default::default()},
+                            blend: blend_nrm,
+                            point_size: Some(2.0),
+                            polygon_mode: PolygonMode::Point,
+                            ..Default::default()};
+                        frame.draw(
+                            &storage.vertex_buffer,
+                            NoIndices { primitives: PrimitiveType::Points },
+                            &storage.programs[1],
+                            &uniforms,
+                            &params).unwrap();
+
+
+                        /*let params = DrawParameters {
                             depth: glium::Depth {
                                 test: DepthTest::IfLess,
                                 write: false,
@@ -253,7 +307,7 @@ impl ApplicationHandler for App {
                             &storage.index_buffers[0],
                             &storage.programs[1],
                             &uniforms,
-                            &params).unwrap();
+                            &params).unwrap();*/
 
 
                         frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);
@@ -357,6 +411,19 @@ impl ApplicationHandler for App {
                             &params).unwrap();
                          */
                         //display.flush();
+
+                        /*tex.as_surface().clear_color(0.0,0.0,0.0,0.0f32);
+                        let image_unit = tex
+                            .image_unit(ImageUnitFormat::RGBA8).unwrap()
+                            .set_access(ImageUnitAccess::ReadWrite);
+                        let _ = &storage.computes[0].execute(
+                                                                uniform! {
+                                time:       t,
+                                width:      tex.width(),
+                                height:     tex.height(),
+                                dst:        image_unit,
+                            },  tex.width(),tex.height(),1);
+                        tex.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);*/
 
                         //the "save-to-file" functionality doesn't properly work rn.
                         //using something like this "do_save" variable is bad. needed for easier debugging.

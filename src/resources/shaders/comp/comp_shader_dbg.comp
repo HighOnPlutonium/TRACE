@@ -5,12 +5,27 @@ layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 uniform float time;
 uniform uint width;
 uniform uint height;
-uniform layout(binding=3, rgba8) image2D src;
-uniform layout(binding=4, rgba8) image2D dst;
+uniform layout(binding=3, rgba8) image2D dst;
 
 
 void main() {
     ivec2 pos = ivec2(gl_GlobalInvocationID.x, gl_GlobalInvocationID.y);
 
-    /*do stuff here. whatever. mostly empty compute shader for some free space if needed when debugging.*/
+    vec4 color = imageLoad(dst, pos);
+
+    float x = float(pos.x)-width/2;
+    float y = float(pos.y)-height/2;
+
+    float X = sin(radians(x))*100;
+    float Y = y;
+    bool uX = int(X)/int(Y) > 0;
+    bool lX = int(X)/int(Y) > 0.1;
+    bool uY = int(Y)/int(X) > 0;
+    bool lY = int(Y)/int(X) > 0.1;
+    bool value = (uY^^lY)^^(uX^^lX);
+    color += vec4(vec3(value),1);
+
+
+
+    imageStore(dst, pos, color);
 }
