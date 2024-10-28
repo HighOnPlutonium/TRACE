@@ -31,7 +31,7 @@ uniform float time;
 void main() {
 
     mat4 t4 = xz_yw_rot;
-    //t4 = mat4(1);
+    t4 = mat4(1);
     mat4 t3 = speen;
     //t3 = mat4(1);
 
@@ -45,7 +45,7 @@ void main() {
       true_normal = t_normal;
 
        v_normal = transpose(inverse(mat3(t3))) * p_normal;
-    gl_Position = scale * t3 * vec4(p_position, 1.0);
+    gl_Position = scale * t3 * vec4(p_position, 1.2);
      v_position = gl_Position.xyz / gl_Position.w;
 
 }

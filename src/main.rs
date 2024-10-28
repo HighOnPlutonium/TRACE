@@ -3,25 +3,28 @@ extern crate glium;
 extern crate glutin_winit;
 extern crate winit;
 
+use std::any::Any;
 use std::borrow::Cow;
 use std::error::Error;
+use std::iter;
 use std::num::NonZeroU32;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Deref};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use glium::{Blend, DepthTest, draw_parameters, DrawParameters, LinearBlendingFactor, Program, Surface, Texture2d, uniform, PolygonMode};
-use glium::backend::{glutin::Display, glutin::glutin::context::ContextAttributesBuilder};
-use glium::buffer::Mapping;
+use glium::backend::{Facade, glutin::Display, glutin::glutin::context::ContextAttributesBuilder};
+use glium::buffer::{Buffer, BufferMode, BufferType, Mapping};
 use glium::glutin::config::ConfigTemplateBuilder;
 use glium::glutin::context::Robustness;
-use glium::glutin::display::GetGlDisplay;
+use glium::glutin::display::{AsRawDisplay, GetGlDisplay};
 use glium::glutin::prelude::{GlDisplay, NotCurrentGlContext};
-use glium::glutin::surface::{SurfaceAttributesBuilder, WindowSurface};
+use glium::glutin::surface::{Rect, SurfaceAttributesBuilder, WindowSurface};
 use glium::index::{IndexBufferAny, PrimitiveType};
 use glium::index::IndicesSource::NoIndices;
 use glium::program::ComputeShader;
-use glium::texture::{MipmapsOption, RawImage2d, Texture2dDataSink, UncompressedFloatFormat};
+use glium::texture::{DepthTexture2d, MipmapsOption, RawImage2d, Texture2dArray, Texture2dDataSink, UncompressedFloatFormat};
+use glium::texture::Dimensions::Texture3d;
 use glium::uniforms::{ImageUnitAccess, ImageUnitFormat, MagnifySamplerFilter, MinifySamplerFilter, SamplerWrapFunction, UniformBuffer};
 use glium::uniforms::UniformType::Image2d;
 use glium::vertex::VertexBuffer;
@@ -37,6 +40,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::keyboard::{Key, NamedKey};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
+use uuid::uuid;
 
 mod util;
 
@@ -50,14 +54,41 @@ struct Vertex {
 implement_vertex!(Vertex,position);
 
 
+fn make_kernel<F: Facade>(facade: &F, data: &[f32]) -> Result<Texture2dArray, Box<dyn Error>> {
+    let size = data.len();
+    let mut positive = Vec::<f32>::with_capacity(size);
+    let mut negative = Vec::<f32>::with_capacity(size);
 
-
+    data.iter().for_each(|x| {
+        positive.push(f32::from(x.is_sign_positive()) * x);
+        negative.push(f32::from(x.is_sign_negative()) * x);
+    });
+    let size = (size as f32).sqrt() as usize;
+    let positive = positive.chunks_exact(size).map(|x|x.to_vec()).collect_vec();
+    let negative = negative.chunks_exact(size).map(|x|x.to_vec()).collect_vec();
+    Ok(Texture2dArray::with_format(facade, vec![positive,negative], UncompressedFloatFormat::F32, MipmapsOption::NoMipmap)?)
+}
 
 struct RenderStorage {
     vertex_buffer: VertexBufferAny,
     index_buffers: Vec<IndexBufferAny>,
     programs: Vec<Program>,
     computes: Vec<ComputeShader>,
+    kernels: Vec<Texture2dArray>,
+    previous: Texture2d,
+    stuff: f32,
+    history: Vec<Texture2d>
+}
+impl RenderStorage {
+    fn next(&mut self, next: &Texture2d) {
+        next.as_surface().fill(&self.previous.as_surface(), MagnifySamplerFilter::Nearest);
+    }
+    fn more(&mut self, other: f32) {
+        self.stuff += other;
+    }
+    fn less(&mut self, other: f32) {
+        self.stuff -= other;
+    }
 }
 struct TimedStorage {
     process: Box<Instant>,
@@ -149,7 +180,7 @@ impl ApplicationHandler for App {
                     computes.push(ComputeShader::from_source(display,
                                                              &*util::load_shader(util::COMP_SHADER_CNV)
                                                              ).unwrap());
-                    let step = 0.05;
+                    let step = 0.02;
                     let x = 1.0f32;
                     let y = 1.0f32;
                     let z = 1.0f32;
@@ -172,11 +203,66 @@ impl ApplicationHandler for App {
                     }
                     let grid_vbuf = VertexBuffer::new(display, &data).unwrap();
                     vertex_buffer = grid_vbuf.into();
+                    let mut kernel_data: Vec<_> = Vec::with_capacity(6);
+                    kernel_data.push([
+                        [0.0, 0.0, 0.0],
+                        [0.0, 1.0, 0.0],
+                        [0.0, 0.0, 0.0],
+                    ].into_iter().flatten().map(|x| x / 1f32).collect_vec());
+                    kernel_data.push([
+                        [ 0.0,-1.0, 0.0],
+                        [-1.0, 4.0,-1.0],
+                        [ 0.0,-1.0, 0.0],
+                    ].into_iter().flatten().map(|x|x/1f32).collect_vec());
+                    kernel_data.push([
+                        [-1.0,-1.0,-1.0],
+                        [-1.0, 8.0,-1.0],
+                        [-1.0,-1.0,-1.0],
+                    ].into_iter().flatten().map(|x|x/1f32).collect_vec());
+                    kernel_data.push([
+                        [ 1.01, 1.0, 0.0],
+                        [ 1.0, 0.1,-1.0],
+                        [ 0.0,-1.0,-1.0],
+                    ].into_iter().flatten().map(|x|x/1f32).collect_vec());
+                    kernel_data.push([
+                        [ 1.0,  4.0,  6.0,  4.0, 1.0],
+                        [ 4.0, 16.0, 24.0, 16.0, 4.0],
+                        [ 6.0, 24.0, 36.0, 24.0, 6.0],
+                        [ 4.0, 16.0, 24.0, 16.0, 4.0],
+                        [ 1.0,  4.0,  6.0,  4.0, 1.0],
+                    ].into_iter().flatten().map(|x|x/256f32).collect_vec());
+                    kernel_data.push([
+                        [ 1.0,  4.0,   6.0,  4.0, 1.0],
+                        [ 4.0, 16.0,  24.0, 16.0, 4.0],
+                        [ 6.0, 24.0,-476.0, 24.0, 6.0],
+                        [ 4.0, 16.0,  24.0, 16.0, 4.0],
+                        [ 1.0,  4.0,   6.0,  4.0, 1.0],
+                    ].into_iter().flatten().map(|x|x/-256f32).collect_vec());
+                    kernel_data.push([
+                        [0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25],
+                        [0.5, 0.25, 0.5, 0.75, 0.75, 0.75, 0.5, 0.25, 0.5],
+                        [0.75, 0.5, 0.25, 0.5, 0.5, 0.5, 0.25, 0.5, 0.75],
+                        [1.0, 0.75, 0.5, 0.25, 0.25, 0.25, 0.5, 0.75, 1.0],
+                        [1.0, 0.75, 0.5, 0.25, -99.0, 0.25, 0.5, 0.75, 1.0],
+                        [1.0, 0.75, 0.5, 0.25, 0.25, 0.25, 0.5, 0.75, 1.0],
+                        [0.75, 0.5, 0.25, 0.5, 0.5, 0.5, 0.25, 0.5, 0.75],
+                        [0.5, 0.25, 0.5, 0.75, 0.75, 0.75, 0.5, 0.25, 0.5],
+                        [0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25f32],
+                    ].into_iter().flatten().map(|x|x/-56f32).collect_vec());
+                    let kernels: Vec<Texture2dArray> = kernel_data.iter().map(|x|make_kernel(display,x).unwrap()).collect_vec();
+                    let previous = Texture2d::empty(display,display.get_framebuffer_dimensions().0,display.get_framebuffer_dimensions().1).unwrap();
+                    previous.as_surface().clear_color(0f32,0f32,0f32,0f32);
+                    let stuff = 0f32;
+                    let history: Vec<Texture2d> = Vec::with_capacity(60);
                     self.storage = Some(RenderStorage {
                         vertex_buffer,
                         index_buffers,
                         programs,
                         computes,
+                        kernels,
+                        previous,
+                        stuff,
+                        history,
                     });
                     self.window.as_ref().unwrap().request_redraw();
                 }},
@@ -213,7 +299,7 @@ impl ApplicationHandler for App {
                     if let (
                         Some(storage),
                         Some(TimedStorage{process: ref mut process_time, disk_write: ref mut last_write }),
-                        ) = (self.storage.as_ref(),self.instant.as_mut()) {
+                        ) = (self.storage.as_mut(),self.instant.as_mut()) {
 
                         //some of the code here is pretty old. some parts have been overhauled but most of it is either unused or not working.
                         let t = process_time.elapsed().as_secs_f32();
@@ -276,23 +362,37 @@ impl ApplicationHandler for App {
 
 
 
+                        let mut blend_dbg = Blend::alpha_blending();
+                        blend_dbg.alpha = draw_parameters::BlendingFunction::Addition
+                        { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::One };
+                        blend_dbg.color = draw_parameters::BlendingFunction::Addition
+                        { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::One };
 
+
+                        let texture1 = Texture2d::empty(display,width,height).unwrap();
+                        let texture2 = Texture2d::empty(display,width,height).unwrap();
+                        let output = [ ("output1", &texture1), ("output2", &texture2) ];
+                        let depth = DepthTexture2d::empty(display,width,height).unwrap();
+                        let mut multi = glium::framebuffer::MultiOutputFrameBuffer::with_depth_buffer(display, output.iter().cloned(),&depth).unwrap();
+                        multi.clear_color_and_depth((1.0,0.0,0.0,0.0),0.0);
                         let params = DrawParameters {
                             depth: glium::Depth {
-                                test: DepthTest::Overwrite,
+                                test: DepthTest::IfLess,
                                 write: false,
                                 ..Default::default()},
-                            blend: blend_nrm,
-                            point_size: Some(2.0),
-                            polygon_mode: PolygonMode::Point,
+                            blend: blend_dbg,
+                            point_size: Some(1.0),
+                            line_width: Some(2.0),
+                            polygon_mode: PolygonMode::Fill,
                             ..Default::default()};
-                        frame.draw(
+                        multi.draw(
                             &storage.vertex_buffer,
                             NoIndices { primitives: PrimitiveType::Points },
                             &storage.programs[1],
                             &uniforms,
                             &params).unwrap();
-
+                        multi.color_attachments;
+                        //texture2.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);
 
                         /*let params = DrawParameters {
                             depth: glium::Depth {
@@ -310,90 +410,39 @@ impl ApplicationHandler for App {
                             &params).unwrap();*/
 
 
-                        frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);
+
+                        frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);/*
                         frame.clear_color_and_depth((0.0,0.0,0.0,0.0), 1.0);
 
-
-                        //the (currently) hardcoded kernels used in discrete convolution.
-                        //can't even be properly sent to the compute shader due to issues with the SSBO.
-                        let mut kernel_data: Vec<_> = Vec::with_capacity(6);
-                        kernel_data.push([
-                            [0.0, 0.0, 0.0],
-                            [0.0, 1.0, 0.0],
-                            [0.0, 0.0, 0.0],
-                        ].into_iter().flatten().map(|x| x / 1f32).collect_vec());
-                        kernel_data.push([
-                            [ 0.0,-1.0, 0.0],
-                            [-1.0, 4.0,-1.0],
-                            [ 0.0,-1.0, 0.0],
-                        ].into_iter().flatten().map(|x|x/1f32).collect_vec());
-                        kernel_data.push([
-                            [-1.0,-1.0,-1.0],
-                            [-1.0, 8.0,-1.0],
-                            [-1.0,-1.0,-1.0],
-                        ].into_iter().flatten().map(|x|x/1f32).collect_vec());
-                        kernel_data.push([
-                            [ 1.01, 1.0, 0.0],
-                            [ 1.0, 0.1,-1.0],
-                            [ 0.0,-1.0,-1.0],
-                        ].into_iter().flatten().map(|x|x/1f32).collect_vec());
-                        kernel_data.push([
-                            [ 1.0,  4.0,  6.0,  4.0, 1.0],
-                            [ 4.0, 16.0, 24.0, 16.0, 4.0],
-                            [ 6.0, 24.0, 36.0, 24.0, 6.0],
-                            [ 4.0, 16.0, 24.0, 16.0, 4.0],
-                            [ 1.0,  4.0,  6.0,  4.0, 1.0],
-                        ].into_iter().flatten().map(|x|x/256f32).collect_vec());
-                        kernel_data.push([
-                            [ 1.0,  4.0,   6.0,  4.0, 1.0],
-                            [ 4.0, 16.0,  24.0, 16.0, 4.0],
-                            [ 6.0, 24.0,-476.0, 24.0, 6.0],
-                            [ 4.0, 16.0,  24.0, 16.0, 4.0],
-                            [ 1.0,  4.0,   6.0,  4.0, 1.0],
-                        ].into_iter().flatten().map(|x|x/-256f32).collect_vec());
-                        kernel_data.push([
-                            [0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25],
-                            [0.5, 0.25, 0.5, 0.75, 0.75, 0.75, 0.5, 0.25, 0.5],
-                            [0.75, 0.5, 0.25, 0.5, 0.5, 0.5, 0.25, 0.5, 0.75],
-                            [1.0, 0.75, 0.5, 0.25, 0.25, 0.25, 0.5, 0.75, 1.0],
-                            [1.0, 0.75, 0.5, 0.25, -99.0, 0.25, 0.5, 0.75, 1.0],
-                            [1.0, 0.75, 0.5, 0.25, 0.25, 0.25, 0.5, 0.75, 1.0],
-                            [0.75, 0.5, 0.25, 0.5, 0.5, 0.5, 0.25, 0.5, 0.75],
-                            [0.5, 0.25, 0.5, 0.75, 0.75, 0.75, 0.5, 0.25, 0.5],
-                            [0.25, 0.5, 0.75, 1.0, 1.0, 1.0, 0.75, 0.5, 0.25f32],
-                        ].into_iter().flatten().map(|x|x/-56f32).collect_vec());
-
-
-                        //all the stuff here and in the scope right after the "kernel_buffer" definition + instantiation
-                        //has to do with the SSBO thingy. once again, it does not work. argh
-                        const KERNEL_NUM: usize = 4;
-                        let kernel = &kernel_data[KERNEL_NUM];
-
-                        let mut kernel_buffer: UniformBuffer<_> = UniformBuffer::empty_unsized_immutable(display, kernel.len()*4).unwrap();
-                        {
-                            let mut mapping: Mapping<[_]> = kernel_buffer.map();
-                            mapping.iter_mut().enumerate().for_each(|(idx,val)|*val=kernel[idx]);
-                        }
-
-                        let alt_image_unit = alt_tex
-                            .image_unit(ImageUnitFormat::RGBA8).unwrap()
-                            .set_access(ImageUnitAccess::Write);
+                        let empty = Texture2d::empty(display,width,height).unwrap();
+                        empty.as_surface().clear_color(0.0,0.0,0.0,0.0);
                         let image_unit = tex
                             .image_unit(ImageUnitFormat::RGBA8).unwrap()
                             .set_access(ImageUnitAccess::Read);
                         let _ = &storage.computes[1].execute(   //COMPUTE SHADER STUFF!!! YAY!!!
                             uniform! {
+                                kernel:     &storage.kernels[0],
+                                previous:   storage.history.get(1).unwrap_or(&empty),
                                 time:       t,
                                 width:      tex.width(),
                                 height:     tex.height(),
                                 dst:        image_unit,
-                                src:        alt_image_unit,
-                                Kernel:     &kernel_buffer,
+                                src:        alt_tex,
                             },  tex.width(),tex.height(),1);
-                        //if (t%2.0)<0.01 { println!("{:?}",kernel_buffer.read().unwrap()); }
 
-                        //frame.clear_color_and_depth((0.0,0.0,0.0,0.0),0.0);
-                        tex.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);
+                        /*if storage.stuff > 0f32  {
+                            storage.next(alt_tex);
+                            storage.less(2f32);
+                        }
+                        storage.more(1f32);*/
+                        if storage.history.len() < 3 {
+                            storage.history.push(Texture2d::new(display,tex.read_to_pixel_buffer().read_as_texture_2d::<RawImage2d<u8>>().unwrap()).unwrap());
+                        } else {
+                            storage.history.remove(0);
+                        }
+                        tex.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);*/
+
+
 
                         //commented the below stuff to enable/disable as needed during development.
                         //as such, enabling this is effectively hardcoded. do I need to explain why this is "suboptimal"?

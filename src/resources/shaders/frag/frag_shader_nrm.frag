@@ -1,9 +1,10 @@
-#version 450 core
+#version 460
 //#extension GL_NV_fragment_shader_barycentric : enable
 //#extension GL_ARB_gpu_shader5 : enable
 //#extension GL_NV_gpu_shader5 : enable
 
-out vec4 color;
+layout(location=0, index=0) out vec4 output1;
+layout(location=0, index=1) out vec4 output2;
 
 in vec4 true_position;
 //pervertexNV in vec4 true_normal_PV[];
@@ -25,6 +26,13 @@ uniform float time;
 void main() {
     vec3 f_normal = normalize(cross(dFdx(v_position), dFdy(v_position)));
 
+
+
+    vec4 color;
+    vec4 auxiliary = vec4(0);
+
+
+
     color = vec4(0,0,0,1);
     vec4 tempColor = vec4(0);
 
@@ -33,7 +41,7 @@ void main() {
 
 
     vec4 value = vec4(true_position.wwww);
-    vec4 bound = vec4(sin(true_position.xyz*16+time)/8,true_position.w);
+    vec4 bound = vec4(abs(true_position.xyzw+dist*sin(time)));
     vec4 upper = vec4(0.1);
     vec4 lower = vec4(0.1);
 
@@ -43,6 +51,12 @@ void main() {
     if(check.z){color+=vec4(0,0,1,0);}
     if(check.w){color+=vec4(0,0,0,0);}
 
+    auxiliary = vec4(0,1,0,0.5);
+
+    color = vec4(1,0,1,1);
+
+    output1 = color;
+    output2 = auxiliary;
 
     //color = vec4(1,1,1,0.3);
     //color = vec4(abs(true_normal));
