@@ -180,7 +180,7 @@ impl ApplicationHandler for App {
                     computes.push(ComputeShader::from_source(display,
                                                              &*util::load_shader(util::COMP_SHADER_CNV)
                                                              ).unwrap());
-                    let step = 0.02;
+                    let step = 0.1;
                     let x = 1.0f32;
                     let y = 1.0f32;
                     let z = 1.0f32;
@@ -201,8 +201,8 @@ impl ApplicationHandler for App {
                             }
                         }
                     }
-                    let grid_vbuf = VertexBuffer::new(display, &data).unwrap();
-                    vertex_buffer = grid_vbuf.into();
+                    //let grid_vbuf = VertexBuffer::new(display, &data).unwrap();
+                    //vertex_buffer = grid_vbuf.into();
                     let mut kernel_data: Vec<_> = Vec::with_capacity(6);
                     kernel_data.push([
                         [0.0, 0.0, 0.0],
@@ -355,44 +355,36 @@ impl ApplicationHandler for App {
                             { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::ConstantAlpha };
 
                         let mut blend_src = Blend::alpha_blending();
-                        blend_src.alpha = draw_parameters::BlendingFunction::Addition
-                            { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::One };
+                        blend_src.alpha = draw_parameters::BlendingFunction::Subtraction
+                            { source: LinearBlendingFactor::SourceColor, destination: LinearBlendingFactor::SourceColor };
                         blend_src.color = draw_parameters::BlendingFunction::Addition
-                            { source: LinearBlendingFactor::SourceAlpha, destination: LinearBlendingFactor::SourceAlpha };
+                            { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::SourceAlpha };
 
 
 
                         let mut blend_dbg = Blend::alpha_blending();
-                        blend_dbg.alpha = draw_parameters::BlendingFunction::Addition
-                        { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::One };
+                        blend_dbg.alpha = draw_parameters::BlendingFunction::Subtraction
+                        { source: LinearBlendingFactor::SourceColor, destination: LinearBlendingFactor::SourceColor };
                         blend_dbg.color = draw_parameters::BlendingFunction::Addition
-                        { source: LinearBlendingFactor::One, destination: LinearBlendingFactor::One };
+                        { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::SourceOneColor };
 
 
                         let texture1 = Texture2d::empty(display,width,height).unwrap();
                         let texture2 = Texture2d::empty(display,width,height).unwrap();
                         let output = [ ("output1", &texture1), ("output2", &texture2) ];
-                        let depth = DepthTexture2d::empty(display,width,height).unwrap();
-                        let mut multi = glium::framebuffer::MultiOutputFrameBuffer::with_depth_buffer(display, output.iter().cloned(),&depth).unwrap();
-                        multi.clear_color_and_depth((1.0,0.0,0.0,0.0),0.0);
+                        let mut multi = glium::framebuffer::MultiOutputFrameBuffer::new(display, output.iter().cloned()).unwrap();
+
                         let params = DrawParameters {
-                            depth: glium::Depth {
-                                test: DepthTest::IfLess,
-                                write: false,
-                                ..Default::default()},
                             blend: blend_dbg,
-                            point_size: Some(1.0),
-                            line_width: Some(2.0),
-                            polygon_mode: PolygonMode::Fill,
                             ..Default::default()};
                         multi.draw(
                             &storage.vertex_buffer,
-                            NoIndices { primitives: PrimitiveType::Points },
+                            &storage.index_buffers[1],
                             &storage.programs[1],
                             &uniforms,
                             &params).unwrap();
-                        multi.color_attachments;
-                        //texture2.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);
+                            texture1.as_surface().fill(&frame,MagnifySamplerFilter::Nearest);
+                            texture2.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);
 
                         /*let params = DrawParameters {
                             depth: glium::Depth {
@@ -411,7 +403,8 @@ impl ApplicationHandler for App {
 
 
 
-                        frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);/*
+                        //frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);
+                        /*
                         frame.clear_color_and_depth((0.0,0.0,0.0,0.0), 1.0);
 
                         let empty = Texture2d::empty(display,width,height).unwrap();

@@ -45,7 +45,7 @@ void main() {
       true_normal = t_normal;
 
        v_normal = transpose(inverse(mat3(t3))) * p_normal;
-    gl_Position = scale * t3 * vec4(p_position, 1.2);
+    gl_Position = scale * t3 * vec4(p_position, 1);
      v_position = gl_Position.xyz / gl_Position.w;
 
 }

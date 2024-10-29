@@ -3,6 +3,7 @@
 //#extension GL_ARB_gpu_shader5 : enable
 //#extension GL_NV_gpu_shader5 : enable
 
+
 layout(location=0, index=0) out vec4 output1;
 layout(location=0, index=1) out vec4 output2;
 
@@ -21,44 +22,18 @@ uniform float time;
 
 
 
-
-
 void main() {
     vec3 f_normal = normalize(cross(dFdx(v_position), dFdy(v_position)));
-
 
 
     vec4 color;
     vec4 auxiliary = vec4(0);
 
 
+    color = vec4(1,1,1,0.7);
+    auxiliary = vec4(f_normal,1);
 
-    color = vec4(0,0,0,1);
-    vec4 tempColor = vec4(0);
-
-    //color = vec4(f_normal,0.3);
-    tempColor = vec4(1);
-
-
-    vec4 value = vec4(true_position.wwww);
-    vec4 bound = vec4(abs(true_position.xyzw+dist*sin(time)));
-    vec4 upper = vec4(0.1);
-    vec4 lower = vec4(0.1);
-
-    bvec4 check = equal(lessThanEqual(value,bound+upper),lessThanEqual(bound-lower,value));
-    if(check.x){color+=vec4(1,0,0,0);}
-    if(check.y){color+=vec4(0,1,0,0);}
-    if(check.z){color+=vec4(0,0,1,0);}
-    if(check.w){color+=vec4(0,0,0,0);}
-
-    auxiliary = vec4(0,1,0,0.5);
-
-    color = vec4(1,0,1,1);
 
     output1 = color;
     output2 = auxiliary;
-
-    //color = vec4(1,1,1,0.3);
-    //color = vec4(abs(true_normal));
-    //color = vec4(v_normal,1);
 }
