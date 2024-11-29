@@ -4,8 +4,7 @@
 //#extension GL_NV_gpu_shader5 : enable
 
 
-layout(location=0, index=0) out vec4 output1;
-layout(location=0, index=1) out vec4 output2;
+out vec4 color;
 
 in vec4 true_position;
 //pervertexNV in vec4 true_normal_PV[];
@@ -23,17 +22,10 @@ uniform float time;
 
 
 void main() {
+    float t = radians(time * 120);
+
     vec3 f_normal = normalize(cross(dFdx(v_position), dFdy(v_position)));
 
+    color = vec4(pow(smoothstep(-1,1,true_position.www),vec3(2)),0.5);
 
-    vec4 color;
-    vec4 auxiliary = vec4(0);
-
-
-    color = vec4(1,1,1,0.7);
-    auxiliary = vec4(f_normal,1);
-
-
-    output1 = color;
-    output2 = auxiliary;
 }

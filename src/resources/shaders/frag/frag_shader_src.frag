@@ -6,6 +6,7 @@ in vec3 v_position;
 in vec3 v_normal;
 in float dist;
 in vec4 true_normal;
+in vec4 tex_c;
 
 uniform vec3 u_light;
 

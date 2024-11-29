@@ -319,16 +319,6 @@ impl ApplicationHandler for App {
                                 [ 0.0,      t3.cos(),   0.0,       -t3.sin()],
                                 [ 0.0,      0.0,        1.0,        0.0     ],
                                 [ 0.0,      t3.sin(),   0.0,        t3.cos()]],
-                            yz_xw_rot:
-                               [[ t3.cos(), 0.0,        0.0,       -t3.sin()],
-                                [ 0.0,      1.0,        0.0,        0.0     ],
-                                [ 0.0,      0.0,        1.0,        0.0     ],
-                                [ t3.sin(), 0.0,        0.0,        t3.cos()]],
-                            xy_zw_rot:
-                               [[ 1.0,      0.0,        0.0,        0.0     ],
-                                [ 0.0,      1.0,        0.0,        0.0     ],
-                                [ 0.0,      0.0,        t3.cos(),  -t3.sin()],
-                                [ 0.0,      0.0,        t3.sin(),   t3.cos()]],
                             proj_point:
                                 [ 0.0,      0.0,        0.0,        1.5f32],
                             u_light:
@@ -354,44 +344,14 @@ impl ApplicationHandler for App {
                         blend_nrm.color = draw_parameters::BlendingFunction::Addition
                             { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::ConstantAlpha };
 
-                        let mut blend_src = Blend::alpha_blending();
-                        blend_src.alpha = draw_parameters::BlendingFunction::Subtraction
-                            { source: LinearBlendingFactor::SourceColor, destination: LinearBlendingFactor::SourceColor };
-                        blend_src.color = draw_parameters::BlendingFunction::Addition
-                            { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::SourceAlpha };
-
-
-
                         let mut blend_dbg = Blend::alpha_blending();
-                        blend_dbg.alpha = draw_parameters::BlendingFunction::Subtraction
-                        { source: LinearBlendingFactor::SourceColor, destination: LinearBlendingFactor::SourceColor };
-                        blend_dbg.color = draw_parameters::BlendingFunction::Addition
-                        { source: LinearBlendingFactor::SourceAlphaSaturate, destination: LinearBlendingFactor::SourceOneColor };
-
-
-                        let texture1 = Texture2d::empty(display,width,height).unwrap();
-                        let texture2 = Texture2d::empty(display,width,height).unwrap();
-                        let output = [ ("output1", &texture1), ("output2", &texture2) ];
-                        let mut multi = glium::framebuffer::MultiOutputFrameBuffer::new(display, output.iter().cloned()).unwrap();
+                        blend_nrm.alpha = draw_parameters::BlendingFunction::Subtraction
+                        { source: LinearBlendingFactor::SourceColor, destination: LinearBlendingFactor::DestinationColor };
+                        blend_nrm.color = draw_parameters::BlendingFunction::Addition
+                        { source: LinearBlendingFactor::DestinationAlpha, destination: LinearBlendingFactor::One };
 
                         let params = DrawParameters {
                             blend: blend_dbg,
-                            ..Default::default()};
-                        multi.draw(
-                            &storage.vertex_buffer,
-                            &storage.index_buffers[1],
-                            &storage.programs[1],
-                            &uniforms,
-                            &params).unwrap();
-                            texture1.as_surface().fill(&frame,MagnifySamplerFilter::Nearest);
-                            texture2.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);
-
-                        /*let params = DrawParameters {
-                            depth: glium::Depth {
-                                test: DepthTest::IfLess,
-                                write: false,
-                                ..Default::default()},
-                            blend: blend_nrm,
                             primitive_restart_index: true,
                             ..Default::default()};
                         frame.draw(
@@ -399,9 +359,7 @@ impl ApplicationHandler for App {
                             &storage.index_buffers[0],
                             &storage.programs[1],
                             &uniforms,
-                            &params).unwrap();*/
-
-
+                            &params).unwrap();
 
                         //frame.fill(&alt_tex.as_surface(), MagnifySamplerFilter::Nearest);
                         /*
@@ -434,51 +392,6 @@ impl ApplicationHandler for App {
                             storage.history.remove(0);
                         }
                         tex.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);*/
-
-
-
-                        //commented the below stuff to enable/disable as needed during development.
-                        //as such, enabling this is effectively hardcoded. do I need to explain why this is "suboptimal"?
-                        //uncomment for an additional render pass that draws a wireframe
-                        /*
-                        let params = DrawParameters {
-                            blend: Blend::alpha_blending(),
-                            primitive_restart_index: true,
-                            ..Default::default()};
-                        frame.draw(
-                            &storage.vertex_buffer,
-                            &storage.index_buffers[1],
-                            &storage.programs[0],
-                            &uniforms,
-                            &params).unwrap();
-                         */
-                        //display.flush();
-
-                        /*tex.as_surface().clear_color(0.0,0.0,0.0,0.0f32);
-                        let image_unit = tex
-                            .image_unit(ImageUnitFormat::RGBA8).unwrap()
-                            .set_access(ImageUnitAccess::ReadWrite);
-                        let _ = &storage.computes[0].execute(
-                                                                uniform! {
-                                time:       t,
-                                width:      tex.width(),
-                                height:     tex.height(),
-                                dst:        image_unit,
-                            },  tex.width(),tex.height(),1);
-                        tex.as_surface().fill(&frame, MagnifySamplerFilter::Nearest);*/
-
-                        //the "save-to-file" functionality doesn't properly work rn.
-                        //using something like this "do_save" variable is bad. needed for easier debugging.
-                        let do_save: bool = false;
-                        if last_write.elapsed() >= Duration::from_secs(2) && do_save {
-
-                            let elapsed = yoink_to_file(display, r"c:/users/joelk/desktop/out.png").unwrap();
-
-                            process_time.add_assign(elapsed);
-                            **last_write = Instant::now();
-                            println!("      {:?}",process_time.elapsed());
-                        }
-
 
                     }
                     frame.finish().unwrap();

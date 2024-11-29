@@ -3,6 +3,8 @@
 
 in vec4 position;
 in vec4 normal;
+in vec4 tex;
+out vec4 tex_c;
 
 
 out vec4 true_position;
@@ -17,8 +19,6 @@ uniform mat4 scale;
 uniform mat4 speen;
 uniform vec4 proj_point;
 
-uniform mat4 xy_zw_rot;
-uniform mat4 yz_xw_rot;
 uniform mat4 xz_yw_rot;
 
 uniform float time;
@@ -31,7 +31,7 @@ uniform float time;
 void main() {
 
     mat4 t4 = xz_yw_rot;
-    t4 = mat4(1);
+    //t4 = mat4(1);
     mat4 t3 = speen;
     //t3 = mat4(1);
 
@@ -48,4 +48,5 @@ void main() {
     gl_Position = scale * t3 * vec4(p_position, 1);
      v_position = gl_Position.xyz / gl_Position.w;
 
+    tex_c = tex;
 }

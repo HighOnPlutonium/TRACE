@@ -30,6 +30,7 @@ pub(crate) const COMP_SHADER_CNV: &str = r"./src/resources/shaders/comp/comp_sha
 pub struct Vertex {
     pub(crate) position: [f32;4],
     pub(crate) normal: [f32;4],
+    pub(crate) tex: [f32;4],
 }
 implement_vertex!(Vertex, position, normal); //DOWN HERE IS THE STUFF FOR LOADING AND PARSING .obj wavefront FILES.
 //                                         I'm wanting to switch to another, probably an own format. more things for the future
@@ -52,6 +53,8 @@ pub(crate) fn wavefront(display: &Display<WindowSurface>, prim: PrimitiveType, p
     let mut positions: Vec<_> = Vec::with_capacity(vert_count);
     let mut normals: Vec<_> = Vec::with_capacity(vert_count);
     let mut indices: Vec<(u16,u16)> = Vec::with_capacity(ngon_count*(ngon_size+1));
+    let mut tex: Vec<_> = Vec::with_capacity(vert_count);
+
 
     reader.for_each(|line|{ //many unreadable string operations
         let mut line = line.unwrap();
@@ -66,6 +69,15 @@ pub(crate) fn wavefront(display: &Display<WindowSurface>, prim: PrimitiveType, p
                 let pos: [f32;4] = pos.try_into().unwrap();
                 positions.push(pos);
             },
+            "t " => {
+                let mut c: Vec<f32> = line[2..]
+                    .split(' ').filter(|x|!x.is_empty())
+                    .map(|x|x.parse::<f32>().unwrap()).collect();
+                if dim == 3 { c.push(0.0f32) }
+                let c: [f32;4] = c.try_into().unwrap();
+                tex.push(c);
+
+            }
 
             "vn" => { //if a line in the file begins with "vn". vertex normals r here.
                 let mut norm: Vec<_> = line[3..]
@@ -116,13 +128,14 @@ pub(crate) fn wavefront(display: &Display<WindowSurface>, prim: PrimitiveType, p
             {
                 let position = positions[indices[i].0 as usize];
                 let normal = normals[indices[i].1 as usize];
+                let texc = tex[indices[i].0 as usize];
 
                 i -= adjustment;
                 indices[i-1].0 = positions.len() as u16;
                 positions.push(position);
 
                 vertices.push(Vertex {
-                    position, normal, });
+                    position, normal, tex: texc});
                 adjustment += 1;
             }
         } else {
@@ -130,6 +143,7 @@ pub(crate) fn wavefront(display: &Display<WindowSurface>, prim: PrimitiveType, p
         vertices.push(Vertex {
             position: positions[indices[i].0 as usize],
             normal: normals[indices[i].1 as usize],
+            tex: tex[indices[i].0 as usize],
         })
         }
     }
