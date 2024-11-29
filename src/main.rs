@@ -37,10 +37,11 @@ use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{Key, KeyCode, NamedKey};
 use winit::raw_window_handle::HasWindowHandle;
 use winit::window::{Window, WindowAttributes, WindowId, WindowLevel};
 use uuid::uuid;
+use winit::keyboard::PhysicalKey::{Code, Unidentified};
 
 mod util;
 
@@ -94,6 +95,14 @@ struct TimedStorage {
     process: Box<Instant>,
     disk_write: Box<Instant>,
 }
+struct ControlStorage {
+    rot3d: [f32;3],
+    rot4d: [f32;3],
+    mov3d: [f32;3],
+    mov4d: f32,
+
+    axis: i8,
+}
 
 #[derive(Default)]
 struct App {
@@ -101,6 +110,7 @@ struct App {
     display: Option<Display<WindowSurface>>,
     storage: Option<RenderStorage>,
     instant: Option<TimedStorage>,
+    controls: Option<ControlStorage>
 }
 
 impl ApplicationHandler for App {
@@ -112,6 +122,14 @@ impl ApplicationHandler for App {
             self.instant = Some(TimedStorage {
                 process:    Box::new(Instant::now()),
                 disk_write: Box::new(Instant::now()),
+            });
+            self.controls = Some(ControlStorage {
+                rot3d: [0.0,0.0,0.0f32],
+                rot4d: [0.0,0.0,0.0f32],
+                mov3d: [0.0,0.0,0.0f32],
+                mov4d: 0.0f32,
+
+                axis: 0i8,
             })
         }
         if let Some(_display) = self.display.as_ref() {
@@ -130,13 +148,24 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
+            WindowEvent::KeyboardInput { event, .. } => {
+                let controls = self.controls.as_ref().unwrap();
+                match event.physical_key {
+                    Code(KeyCode::ArrowLeft) => {
+                        controls.rot3d[controls.axis] -= 1.0f32;
+                    },
+                    Code(KeyCode::ArrowRight) => {
+                        controls
+                    }
+                    Code(_) => {},
+                    Unidentified(_) => {},
+                }
+            },
 
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event: event::KeyEvent {
-                    state: ElementState::Pressed,
-                    logical_key: Key::Named(NamedKey::Escape),
-                    .. }, .. } => { event_loop.exit() },
+
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            },
 
             WindowEvent::Resized(size) => {
                 self.display.as_ref().unwrap().resize(size.into());
